@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS leaderboard (
     discord_id INTEGER,
     roblox_username TEXT,
     region TEXT,
-    grade TEXT
+    grade TEXT,
+    clan_name TEXT DEFAULT 'None'
 )
 """)
 
@@ -54,39 +55,40 @@ CREATE TABLE IF NOT EXISTS legacy_leaderboard (
     discord_id INTEGER,
     roblox_username TEXT,
     region TEXT,
-    grade TEXT
+    grade TEXT,
+    clan_name TEXT DEFAULT 'None'
 )
 """)
 conn_lb.commit()
 
 # Seed Legacy Leaderboard with Ranks 1-20
 LEGACY_PLAYERS = [
-    (1, "Furki", 0, "ReinhardReborn0", "Germany", "Special Grade"),
-    (2, "Noah", 0, "NotRealNoahHD", "Ireland", "Special Grade"),
-    (3, "Clipz", 0, "gcIipz", "United Kingdom", "Special Grade"),
-    (4, "Aiden", 0, "notaidenq", "Bulgaria", "Special Grade"),
-    (5, "Ego", 0, "sintelego", "Germany", "Special Grade"),
-    (6, "Ryze", 0, "rqrtxl", "United Kingdom", "Special Grade 1 High Strong"),
-    (7, "Emir", 0, "Emir09876321", "Türkiye", "Special Grade 1 High Strong"),
-    (8, "Zarif", 0, "zarif13413", "United Kingdom", "Special Grade 1 High Strong"),
-    (9, "Alie", 0, "Crpt_Ali", "United Kingdom", "Special Grade 1 High Weak"),
-    (10, "Vexxed", 0, "itsvexxed", "United Kingdom", "Special Grade 1 Mid Strong"),
-    (11, "Crucial", 0, "excrutiality", "United Kingdom", "Special Grade 1 Mid Strong"),
-    (12, "Scofield", 0, "di_0rr", "Netherlands", "Special Grade 1 Mid Strong"),
-    (13, "Aspect", 0, "Aspect_419", "Israel", "Special Grade 1 Mid Weak"),
-    (14, "Mrnobody", 0, "mrnobody6921", "United Kingdom", "Special Grade 1 Mid Weak"),
-    (15, "Hayat", 0, "MasterIndy05", "United Kingdom", "Special Grade 1 Low Strong"),
-    (16, "Vlue", 0, "likecutqhe", "Poland", "Special Grade 1 Low Stable"),
-    (17, "Mon", 0, "Blackfyre099", "Germany", "Special Grade 1 Low Stable"),
-    (18, "Psff0", 0, "psff_0", "United Kingdom", "Special Grade 1 Low Stable"),
-    (19, "Abu Bobby", 0, "abu_bobby8", "Germany", "Special Grade 1 Low Weak"),
-    (20, "NixtonFive", 0, "nixtonfivee", "France", "Special Grade 1 Low Weak"),
+    (1, "Furki", 0, "ReinhardReborn0", "Germany", "Special Grade", "None"),
+    (2, "Noah", 0, "NotRealNoahHD", "Ireland", "Special Grade", "None"),
+    (3, "Clipz", 0, "gcIipz", "United Kingdom", "Special Grade", "None"),
+    (4, "Aiden", 0, "notaidenq", "Bulgaria", "Special Grade", "None"),
+    (5, "Ego", 0, "sintelego", "Germany", "Special Grade", "None"),
+    (6, "Ryze", 0, "rqrtxl", "United Kingdom", "Special Grade 1 High Strong", "None"),
+    (7, "Emir", 0, "Emir09876321", "Türkiye", "Special Grade 1 High Strong", "None"),
+    (8, "Zarif", 0, "zarif13413", "United Kingdom", "Special Grade 1 High Strong", "None"),
+    (9, "Alie", 0, "Crpt_Ali", "United Kingdom", "Special Grade 1 High Weak", "None"),
+    (10, "Vexxed", 0, "itsvexxed", "United Kingdom", "Special Grade 1 Mid Strong", "None"),
+    (11, "Crucial", 0, "excrutiality", "United Kingdom", "Special Grade 1 Mid Strong", "None"),
+    (12, "Scofield", 0, "di_0rr", "Netherlands", "Special Grade 1 Mid Strong", "None"),
+    (13, "Aspect", 0, "Aspect_419", "Israel", "Special Grade 1 Mid Weak", "None"),
+    (14, "Mrnobody", 0, "mrnobody6921", "United Kingdom", "Special Grade 1 Mid Weak", "None"),
+    (15, "Hayat", 0, "MasterIndy05", "United Kingdom", "Special Grade 1 Low Strong", "None"),
+    (16, "Vlue", 0, "likecutqhe", "Poland", "Special Grade 1 Low Stable", "None"),
+    (17, "Mon", 0, "Blackfyre099", "Germany", "Special Grade 1 Low Stable", "None"),
+    (18, "Psff0", 0, "psff_0", "United Kingdom", "Special Grade 1 Low Stable", "None"),
+    (19, "Abu Bobby", 0, "abu_bobby8", "Germany", "Special Grade 1 Low Weak", "None"),
+    (20, "NixtonFive", 0, "nixtonfivee", "France", "Special Grade 1 Low Weak", "None"),
 ]
 
 for p in LEGACY_PLAYERS:
     cursor_lb.execute("""
-    INSERT OR IGNORE INTO legacy_leaderboard (position, display_name, discord_id, roblox_username, region, grade)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO legacy_leaderboard (position, display_name, discord_id, roblox_username, region, grade, clan_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     """, p)
 conn_lb.commit()
 
@@ -119,6 +121,12 @@ def reindex_leaderboard():
         cursor_lb.execute("UPDATE leaderboard SET position = ? WHERE rowid = ?", (index, row[0]))
     conn_lb.commit()
 
+def build_card_description(d_mention, r_user, region, grade, clan_name):
+    desc = f"« « | {d_mention} (`@{r_user}`) | » »\n**Region:** — {region}\n**Grade:** — {grade}"
+    if clan_name and clan_name.strip() and clan_name.lower() != "none":
+        desc += f"\n**Clan:** — {clan_name}"
+    return desc
+
 # --- 5. BOT EVENTS ---
 @bot.event
 async def on_ready():
@@ -134,21 +142,23 @@ async def on_ready():
 @bot.tree.command(name="leaderboard", description="Display the active leaderboard (Ranks 1-20)")
 async def show_leaderboard(interaction: discord.Interaction):
     await interaction.response.defer()
-    cursor_lb.execute("SELECT position, display_name, discord_id, roblox_username, region, grade FROM leaderboard WHERE position BETWEEN 1 AND 20 ORDER BY position ASC")
+    cursor_lb.execute("SELECT position, display_name, discord_id, roblox_username, region, grade, clan_name FROM leaderboard WHERE position BETWEEN 1 AND 20 ORDER BY position ASC")
     players = cursor_lb.fetchall()
     if not players:
         await interaction.followup.send("Active Leaderboard is currently empty.")
         return
 
-    for pos, name, d_id, r_user, region, grade in players:
+    for pos, name, d_id, r_user, region, grade, clan_name in players:
         avatar_url, roblox_id = await get_roblox_data(r_user)
         profile_url = f"https://www.roblox.com/users/{roblox_id}/profile" if roblox_id else None
         d_mention = f"<@{d_id}>" if d_id and d_id != 0 else name
 
+        description = build_card_description(d_mention, r_user, region, grade, clan_name)
+
         embed = discord.Embed(
             title=f"{name} | {pos}.",
             url=profile_url,
-            description=f"« « | {d_mention} (`@{r_user}`) | » »\n**Region:** — {region}\n**Grade:** — {grade}",
+            description=description,
             color=discord.Color.dark_theme()
         )
         if avatar_url:
@@ -162,19 +172,21 @@ async def show_leaderboard(interaction: discord.Interaction):
 @bot.tree.command(name="legacy_leaderboard", description="Display the original Legacy Leaderboard")
 async def show_legacy_leaderboard(interaction: discord.Interaction):
     await interaction.response.defer()
-    cursor_lb.execute("SELECT position, display_name, discord_id, roblox_username, region, grade FROM legacy_leaderboard ORDER BY position ASC")
+    cursor_lb.execute("SELECT position, display_name, discord_id, roblox_username, region, grade, clan_name FROM legacy_leaderboard ORDER BY position ASC")
     players = cursor_lb.fetchall()
 
-    for pos, name, d_id, r_user, region, grade in players:
+    for pos, name, d_id, r_user, region, grade, clan_name in players:
         avatar_url, roblox_id = await get_roblox_data(r_user)
         profile_url = f"https://www.roblox.com/users/{roblox_id}/profile" if roblox_id else None
         d_mention = f"<@{d_id}>" if d_id and d_id != 0 else name
 
+        description = build_card_description(d_mention, r_user, region, grade, clan_name)
+
         embed = discord.Embed(
             title=f"{name} | {pos}.",
             url=profile_url,
-            description=f"« « | {d_mention} (`@{r_user}`) | » »\n**Region:** — {region}\n**Grade:** — {grade}",
-            color=discord.Color.gold()
+            description=description,
+            color=discord.Color.dark_theme()
         )
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
@@ -186,9 +198,9 @@ async def show_legacy_leaderboard(interaction: discord.Interaction):
 
 @bot.tree.command(name="add_player", description="Admin: Add a player to the active leaderboard")
 @commands.has_permissions(administrator=True)
-async def add_player(interaction: discord.Interaction, display_name: str, user: discord.Member, roblox_username: str, region: str, grade: str):
+async def add_player(interaction: discord.Interaction, display_name: str, user: discord.Member, roblox_username: str, region: str, grade: str, clan_name: str = "None"):
     await interaction.response.defer(ephemeral=True)
-    cursor_lb.execute("INSERT INTO leaderboard (display_name, discord_id, roblox_username, region, grade) VALUES (?, ?, ?, ?, ?)", (display_name, user.id, roblox_username, region, grade))
+    cursor_lb.execute("INSERT INTO leaderboard (display_name, discord_id, roblox_username, region, grade, clan_name) VALUES (?, ?, ?, ?, ?, ?)", (display_name, user.id, roblox_username, region, grade, clan_name))
     conn_lb.commit()
     reindex_leaderboard()
     await interaction.followup.send(f"Added **{display_name}** (`{roblox_username}`) to the leaderboard.")
@@ -202,11 +214,12 @@ async def edit_player(
     user: discord.Member = None,
     roblox_username: str = None,
     region: str = None,
-    grade: str = None
+    grade: str = None,
+    clan_name: str = None
 ):
     await interaction.response.defer(ephemeral=True)
 
-    cursor_lb.execute("SELECT display_name, discord_id, roblox_username, region, grade FROM leaderboard WHERE position = ?", (position,))
+    cursor_lb.execute("SELECT display_name, discord_id, roblox_username, region, grade, clan_name FROM leaderboard WHERE position = ?", (position,))
     row = cursor_lb.fetchone()
 
     if not row:
@@ -218,12 +231,13 @@ async def edit_player(
     new_r_user = roblox_username if roblox_username is not None else row[2]
     new_region = region if region is not None else row[3]
     new_grade = grade if grade is not None else row[4]
+    new_clan = clan_name if clan_name is not None else row[5]
 
     cursor_lb.execute("""
     UPDATE leaderboard 
-    SET display_name = ?, discord_id = ?, roblox_username = ?, region = ?, grade = ?
+    SET display_name = ?, discord_id = ?, roblox_username = ?, region = ?, grade = ?, clan_name = ?
     WHERE position = ?
-    """, (new_name, new_d_id, new_r_user, new_region, new_grade, position))
+    """, (new_name, new_d_id, new_r_user, new_region, new_grade, new_clan, position))
     conn_lb.commit()
 
     await interaction.followup.send(f"✏️ Updated player details for rank **#{position} ({new_name})**!")
